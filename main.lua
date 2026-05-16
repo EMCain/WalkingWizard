@@ -9,7 +9,7 @@ local squares
 
 function love.load()
     sti = require('lib/sti')
-    -- gameMap = sti('maps/floor example.lua')
+    gameMap = sti('maps/basicFloor.lua')
 
     camera = require('lib/camera')
     cam1 = camera()
@@ -22,7 +22,7 @@ function love.load()
     wizard = {}
     wizard.x = 5 * squares
     wizard.y = 3 * squares
-    wizard.speed = 32
+    wizard.speed = 48
     wizard.scale = 2
     wizard.spriteSheet = love.graphics.newImage('sprites/player/wizard.png')
     wizard.grid = anim8.newGrid(
@@ -46,14 +46,7 @@ function love.update(dt)
     local vectorX = 0
     local vectorY = 0
 
-    if love.keyboard.isDown("right") then
-        vectorX = vectorX + 1
-        wizard.currentAnimation = wizard.animation.right
-    end
-    if love.keyboard.isDown("left") then
-        vectorX = vectorX - 1
-        wizard.currentAnimation = wizard.animation.left
-    end
+
     if love.keyboard.isDown("down") then
         vectorY = vectorY + 1
         wizard.currentAnimation = wizard.animation.down
@@ -62,11 +55,20 @@ function love.update(dt)
         vectorY = vectorY - 1
         wizard.currentAnimation = wizard.animation.up
     end
+
+    if love.keyboard.isDown("right") then
+        vectorX = vectorX + 1
+        wizard.currentAnimation = wizard.animation.right
+    end
+    if love.keyboard.isDown("left") then
+        vectorX = vectorX - 1
+        wizard.currentAnimation = wizard.animation.left
+    end
     -- stand still if not moving 
     if vectorX == 0 and vectorY == 0 then
         wizard.currentAnimation:gotoFrame(2)
     -- normalize speed
-    elseif vectorX ~= 1 and vectorY ~= 1 then 
+    elseif vectorX ~= 0 and vectorY ~=0 then 
         vectorX = vectorX * .707
         vectorY = vectorY * .707
     end
@@ -80,7 +82,7 @@ end
 
 function love.draw() 
     cam1:attach()
-    --gameMap:drawLayer(gameMap.layers['base floor'])
+    gameMap:drawLayer(gameMap.layers['base floor'])
     wizard.currentAnimation:draw(wizard.spriteSheet, wizard.x, wizard.y, nil, wizard.scale, wizard.scale)
     cam1:detach()
 end

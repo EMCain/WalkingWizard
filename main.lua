@@ -10,6 +10,14 @@ local wizard
 local squares -- pixels in one "square" on the game grid
 local world
 local walls
+local boxSprite
+local boxes
+
+local function getNearestGridCoords (x, y) 
+    local xNumberOfTiles = math.floor(x/squares + 0.5)
+    local yNumberOfTiles = math.floor(y/squares + 0.5)
+    return { x = xNumberOfTiles * squares, y = yNumberOfTiles * squares }
+end
 
 function love.load()
     local sti = require('lib/sti')
@@ -63,9 +71,9 @@ function love.load()
     wizard.collider:setFixedRotation(true)
 
     print('loading')
-    if (gameMap.layers['obstacles']) then
+    if (gameMap.layers['walls - objects']) then
         walls = {}
-        for i, obj in pairs(gameMap.layers['obstacles'].objects) do
+        for i, obj in pairs(gameMap.layers['walls - objects'].objects) do
             if obj.width > 0 and obj.height > 0 then
                 local wall = world:newRectangleCollider(obj.x, obj.y, obj.width, obj.height)
                 wall:setType('static')
@@ -76,8 +84,22 @@ function love.load()
         debug.debug()
     end
 
+    boxSprite = {}
+    -- If I want to open boxes this can be reworked.
+    boxSprite.closed = love.graphics.newImage('sprites/objects/boxAnimation1-Sheet-byandrox-closed.png')
 
-
+    if(gameMap.layers['boxes - objects']) then
+        boxes = {}
+        for i, obj in pairs(gameMap.layers['boxes - objects'].objects) do
+            local box = {}
+            local gridCoords = getNearestGridCoords(obj.x, obj.y)
+            box.collider = world:newRectangleCollider(gridCoords.x, gridCoords.y, squares, squares)
+            box.sprite = boxSprite.closed
+            box.x = gridCoords.x 
+            box.y = gridCoords.y
+            table.insert(boxes, box)
+        end
+    end
 end
 
 function love.update(dt)
@@ -130,9 +152,9 @@ function love.draw()
         gameMap.layers['base floor']
     )
     gameMap:drawLayer(
-        gameMap.layers['walls and misc boxes']
+        gameMap.layers['walls - tiles']
     )
-
+    -- don't render the "boxes - tiles - hidden" layer, it is just for visual reference in Tiled
     wizard.currentAnimation:draw(
         wizard.spriteSheet,
         wizard.x, wizard.y,
@@ -142,6 +164,10 @@ function love.draw()
         wizard.width / 2,
         wizard.height / 2
     )
+
+    for i, obj in pairs (boxes) do 
+        love.graphics.draw(obj.sprite, obj.x, obj.y)
+    end 
     -- world:draw() -- uncomment to view collider outlines
 
     cam1:detach()

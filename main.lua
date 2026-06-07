@@ -12,11 +12,62 @@ local world
 local walls
 local boxSprite
 local boxes
+local boxPushSpeed
 
 local function getNearestGridCoords (x, y) 
     local xNumberOfTiles = math.floor(x/squares + 0.5)
     local yNumberOfTiles = math.floor(y/squares + 0.5)
     return { x = xNumberOfTiles * squares, y = yNumberOfTiles * squares }
+end
+
+-- TODO: get checkWizardCollision to tell me which side it is hitting 
+
+local function roundToGrid(x)
+    if (x > 0) then
+        return math.floor(x / squares) * squares
+    elseif (x < 0) then
+        return math.ceil(x / squares) * squares 
+    else 
+     return 0
+    end
+end
+    
+local function checkWizardCollision(collisionObject)
+    local wizardLeft = wizard.collider:getX()
+    local wizardRight = wizard.collider:getX() + wizard.width
+    local wizardTop = wizard.collider:getY() -- may be complicated by isometric view/wizard's hat being above "grounded" area
+    local wizardBottom = wizard.collider:getY() + wizard.height
+
+    local itemWidth = collisionObject.sprite:getWidth()
+    local itemHeight = collisionObject.sprite:getHeight()
+
+    local collisionObjectLeft = collisionObject.x
+    local collisionObjectRight = collisionObject.x + itemWidth
+    local collisionObjectTop = collisionObject.y
+    local collisionObjectBottom = collisionObject.y + itemHeight
+    local isCollision =  wizardRight > collisionObjectLeft
+        and wizardLeft < collisionObjectRight
+        and wizardBottom > collisionObjectTop
+        and wizardTop < collisionObjectBottom;
+    if not isCollision then
+        return { x=0, y=0 }
+    end
+    
+    local result = { x=0, y=0 }
+    local xDifference = wizardLeft - collisionObjectLeft
+    local yDifference = wizardTop - collisionObjectTop
+    if (math.abs(xDifference) > math.abs(yDifference)) then 
+        result.x = xDifference / math.abs(xDifference)
+    elseif (math.abs(xDifference) < math.abs(yDifference)) then
+        result.y = yDifference / math.abs(yDifference)
+    end
+    -- don't do anything if they're equal, I don't want to allow diagonal pushing
+    return result
+end
+
+local function setPushableMidpointAndDestination (self, directionVector)
+    self.destination.x = self.x + directionVector.x * squares
+    self.destination.y = self.y + directionVector.y * squares
 end
 
 function love.load()
@@ -85,6 +136,7 @@ function love.load()
     end
 
     boxSprite = {}
+    boxPushSpeed = 0.5 * squares
     -- If I want to open boxes this can be reworked.
     boxSprite.closed = love.graphics.newImage('sprites/objects/boxAnimation1-Sheet-byandrox-closed.png')
 
@@ -93,10 +145,13 @@ function love.load()
         for i, obj in pairs(gameMap.layers['boxes - objects'].objects) do
             local box = {}
             local gridCoords = getNearestGridCoords(obj.x, obj.y)
-            box.collider = world:newRectangleCollider(gridCoords.x, gridCoords.y, squares, squares)
+            -- box.collider = world:newRectangleCollider(gridCoords.x, gridCoords.y, squares, squares)
+            -- box.collider:setType('static')
             box.sprite = boxSprite.closed
-            box.x = gridCoords.x 
+            box.x = gridCoords.x
             box.y = gridCoords.y
+            box.destination = {x=gridCoords.x, y=gridCoords.y}
+            box.oldPosition = {x=gridCoords.x, y=gridCoords.y}
             table.insert(boxes, box)
         end
     end
@@ -141,8 +196,51 @@ function love.update(dt)
     world:update(dt)
 
     wizard.currentAnimation:update(dt)
-
+    
     cam1:lookAt(wizard.x, wizard.y)
+
+    -- box collisions and movement
+    for i, box in pairs (boxes) do 
+        local xDistanceToDestination = box.x - box.destination.x
+        local yDistanceToDestination = box.y - box.destination.y
+        -- if (xDistanceToDestination > squares * 1.5) then break 
+        -- end
+        -- print ('xDistanceToDestination', xDistanceToDestination)
+                    print(box.x, xDistanceToDestination, box.destination.x)
+
+        if xDistanceToDestination > 0 and xDistanceToDestination <= squares * 2 then
+            box.x = box.x + dt * boxPushSpeed
+        elseif xDistanceToDestination < 0  and xDistanceToDestination >= squares * 2 then
+            box.x = box.x - dt * boxPushSpeed
+        elseif yDistanceToDestination > 0 then
+            box.y =  box.y + dt * boxPushSpeed
+        elseif yDistanceToDestination < 0 then
+            box.y = box.y - dt * boxPushSpeed
+        else
+            -- if (math.abs(box.x - box.oldPosition.x) > squares or math.abs(box.y - box.oldPosition.y) > squares) then 
+            --     break
+            -- end
+            local collisionSides = checkWizardCollision(box)
+            -- box.oldPosition.x = box.x
+            -- print(collisionSides.x, box.oldPosition.x, box.destination.x, box.x - box.oldPosition.x)
+            -- if (collisionSides.x ~= 0 and math.abs(box.x - box.oldPosition.x) < squares) then 
+            --     box.oldPosition.x = box.x
+            if (collisionSides.x ~= 0) then
+            box.destination.x = roundToGrid(box.x) + collisionSides.x * squares
+            end
+            print('x collision', collisionSides.x, box.destination.x, box.x)
+            --end
+            -- local newDestinationY = box.destination.y + collisionSides.y * squares 
+            -- local distToNewDestY = math.abs(newDestinationY - box.oldPosition.y)
+            -- print('distToNewDestX', distToNewDestX)
+            -- if distToNewDestX =< 0 then 
+                
+            -- else if distToNewDestX <= squares then 
+            --     box.destination.x = newDestinationX
+    
+            -- else if distToNewDestY > 0 and distToNewDestY <= squares then box.destination.y = newDestinationY        
+        end
+    end 
 end
 
 
@@ -168,7 +266,7 @@ function love.draw()
     for i, obj in pairs (boxes) do 
         love.graphics.draw(obj.sprite, obj.x, obj.y)
     end 
-    -- world:draw() -- uncomment to view collider outlines
+    world:draw() -- uncomment to view collider outlines
 
     cam1:detach()
 end

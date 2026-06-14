@@ -34,9 +34,9 @@ end
     
 local function checkWizardCollision(collisionObject)
     local wizardLeft = wizard.collider:getX()
-    local wizardRight = wizard.collider:getX() + wizard.width
-    local wizardTop = wizard.collider:getY() -- may be complicated by isometric view/wizard's hat being above "grounded" area
-    local wizardBottom = wizard.collider:getY() + wizard.height
+    local wizardRight = wizard.collider:getX() + wizard.colliderWidth
+    local wizardTop = wizard.collider:getY() - wizard.colliderHeight -- may be complicated by isometric view/wizard's hat being above "grounded" area
+    local wizardBottom = wizard.collider:getY()
 
     local itemWidth = collisionObject.sprite:getWidth()
     local itemHeight = collisionObject.sprite:getHeight()
@@ -54,8 +54,8 @@ local function checkWizardCollision(collisionObject)
     end
     
     local result = { x=0, y=0 }
-    local xDifference = wizardLeft - collisionObjectLeft
-    local yDifference = wizardTop - collisionObjectTop
+    local xDifference = math.floor(wizardLeft - collisionObjectLeft)
+    local yDifference = math.floor(wizardTop - collisionObjectTop)
     if (math.abs(xDifference) > math.abs(yDifference)) then 
         result.x = xDifference / math.abs(xDifference)
     elseif (math.abs(xDifference) < math.abs(yDifference)) then
@@ -111,12 +111,13 @@ function love.load()
     wizard.animation.right = anim8.newAnimation(wizard.grid('13-16', 1), 0.15)
 
     wizard.currentAnimation = wizard.animation.up
-
+    wizard.colliderWidth = wizard.width 
+    wizard.colliderHeight = wizard.height / 2
     wizard.collider = world:newBSGRectangleCollider(
         100,
         250,
-        wizard.width * 2,
-        wizard.height, -- would use wizard.height if we wanted it to be the full height; instead, its hat goes above the collider a bit
+        wizard.colliderWidth,
+        wizard.colliderHeight, 
         wizard.width * 0.5
     )
     wizard.collider:setFixedRotation(true)
@@ -191,7 +192,7 @@ function love.update(dt)
     wizard.collider:setLinearVelocity(vectorX * wizard.speed, vectorY * wizard.speed)
 
     wizard.x = wizard.collider:getX()
-    wizard.y = wizard.collider:getY() + wizard.height * 0.2 -- adding offset here
+    wizard.y = wizard.collider:getY() - wizard.height / 8 -- adding offset here
 
     world:update(dt)
 
@@ -206,15 +207,15 @@ function love.update(dt)
         -- if (xDistanceToDestination > squares * 1.5) then break 
         -- end
         -- print ('xDistanceToDestination', xDistanceToDestination)
-                    print(box.x, xDistanceToDestination, box.destination.x)
+                    --print(box.x, xDistanceToDestination, box.destination.x)
 
         if xDistanceToDestination > 0 and xDistanceToDestination <= squares * 2 then
             box.x = box.x + dt * boxPushSpeed
-        elseif xDistanceToDestination < 0  and xDistanceToDestination >= squares * 2 then
+        elseif xDistanceToDestination < 0  and xDistanceToDestination >= squares * 2  then
             box.x = box.x - dt * boxPushSpeed
-        elseif yDistanceToDestination > 0 then
+        elseif yDistanceToDestination > 0 and yDistanceToDestination <= squares * 2 then
             box.y =  box.y + dt * boxPushSpeed
-        elseif yDistanceToDestination < 0 then
+        elseif yDistanceToDestination < 0 and yDistanceToDestination >= squares * 2 then
             box.y = box.y - dt * boxPushSpeed
         else
             -- if (math.abs(box.x - box.oldPosition.x) > squares or math.abs(box.y - box.oldPosition.y) > squares) then 
@@ -226,9 +227,11 @@ function love.update(dt)
             -- if (collisionSides.x ~= 0 and math.abs(box.x - box.oldPosition.x) < squares) then 
             --     box.oldPosition.x = box.x
             if (collisionSides.x ~= 0) then
-            box.destination.x = roundToGrid(box.x) + collisionSides.x * squares
+                box.destination.x = roundToGrid(box.x) + collisionSides.x * squares
+            elseif (collisionSides.y ~=0) then 
+                box.destination.y = roundToGrid(box.y) + collisionSides.y * squares
             end
-            print('x collision', collisionSides.x, box.destination.x, box.x)
+            print('x', collisionSides.x, 'y', collisionSides.y)
             --end
             -- local newDestinationY = box.destination.y + collisionSides.y * squares 
             -- local distToNewDestY = math.abs(newDestinationY - box.oldPosition.y)

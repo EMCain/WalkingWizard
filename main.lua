@@ -78,9 +78,10 @@ function love.load()
     cam1 = camera.new(nil, nil, 2)
 
     local anim8 = require('lib/anim8')
-    local wf = require('lib/windfield')
 
-    world = wf.newWorld(0, 0)
+    world = love.physics.newWorld(0, 0, true)
+        --world:setCallbacks(beginContact, endContact, preSolve, postSolve)
+    
 
     love.graphics.setDefaultFilter('nearest', 'nearest')
 
@@ -88,15 +89,17 @@ function love.load()
 
     wizard = {}
 
-    wizard.x = 5 * squares
-    wizard.y = 3 * squares
+    -- TODO create a positioning wrapper to handle multiplying by squares
+
     wizard.speed = 6 * squares
     wizard.scale = 2
     wizard.spriteSheet = love.graphics.newImage('sprites/player/wizard.png')
 
+    -- TODO see about replacing these with getters on wizard.shape
     wizard.width = 16
-    wizard.height = 32
+    wizard.height = 20
 
+    -- TODO roll my own animation renderer with quads and this tutorial https://sheepolution.com/learn/book/17
     wizard.grid = anim8.newGrid(
         wizard.width,
         wizard.height,
@@ -111,24 +114,24 @@ function love.load()
     wizard.animation.right = anim8.newAnimation(wizard.grid('13-16', 1), 0.15)
 
     wizard.currentAnimation = wizard.animation.up
-    wizard.colliderWidth = wizard.width 
-    wizard.colliderHeight = wizard.height / 2
-    wizard.collider = world:newBSGRectangleCollider(
-        100,
-        250,
-        wizard.colliderWidth,
-        wizard.colliderHeight, 
-        wizard.width * 0.5
-    )
-    wizard.collider:setFixedRotation(true)
+
+    wizard.body = love.physics.newBody(world, 5*squares, 3*squares, "dynamic")
+    wizard.body:setFixedRotation(true)
+    wizard.shape = love.physics.newRectangleShape(wizard.width, wizard.height)
+    wizard.fixture = love.physics.newFixture(wizard.body, wizard.shape)
+    wizard.fixture:setUserData("wizard.fixture")
+    wizard.fixture:setRestitution(0)
 
     print('loading')
     if (gameMap.layers['walls - objects']) then
         walls = {}
         for i, obj in pairs(gameMap.layers['walls - objects'].objects) do
             if obj.width > 0 and obj.height > 0 then
-                local wall = world:newRectangleCollider(obj.x, obj.y, obj.width, obj.height)
-                wall:setType('static')
+                local wall = {}
+                wall.body = love.physics.newBody(world, obj.x + obj.width / 2, obj.y + obj.height / 2, "static")
+                wall.shape = love.physics.newRectangleShape(obj.width, obj.height)
+                wall.fixture = love.physics.newFixture(wall.body, wall.shape)
+
                 table.insert(walls, wall)
             end
         end
@@ -146,8 +149,11 @@ function love.load()
         for i, obj in pairs(gameMap.layers['boxes - objects'].objects) do
             local box = {}
             local gridCoords = getNearestGridCoords(obj.x, obj.y)
-            -- box.collider = world:newRectangleCollider(gridCoords.x, gridCoords.y, squares, squares)
-            -- box.collider:setType('static')
+            
+            box.body = love.physics.newBody(world, gridCoords.x, gridCoords.y, "kinematic")
+            box.shape = love.physics.newRectangleShape(squares, squares)
+
+
             box.sprite = boxSprite.closed
             box.x = gridCoords.x
             box.y = gridCoords.y
@@ -189,61 +195,59 @@ function love.update(dt)
         vectorY = vectorY * .707
     end
 
-    wizard.collider:setLinearVelocity(vectorX * wizard.speed, vectorY * wizard.speed)
-
-    wizard.x = wizard.collider:getX()
-    wizard.y = wizard.collider:getY() - wizard.height / 8 -- adding offset here
+    wizard.body:setLinearVelocity(vectorX * wizard.speed, vectorY * wizard.speed)
 
     world:update(dt)
 
     wizard.currentAnimation:update(dt)
     
-    cam1:lookAt(wizard.x, wizard.y)
+    cam1:lookAt(wizard.body:getX(), wizard.body:getY())
 
-    -- box collisions and movement
-    for i, box in pairs (boxes) do 
-        local xDistanceToDestination = box.x - box.destination.x
-        local yDistanceToDestination = box.y - box.destination.y
-        -- if (xDistanceToDestination > squares * 1.5) then break 
-        -- end
-        -- print ('xDistanceToDestination', xDistanceToDestination)
-                    --print(box.x, xDistanceToDestination, box.destination.x)
+    --  TODO I can probably keep some of the logic around destination here, though 
+    -- I may want to move it to one of the callback methods for world.setCallbacks
+    -- -- box collisions and movement
+    -- for i, box in pairs (boxes) do 
+    --     local xDistanceToDestination = box.x - box.destination.x
+    --     local yDistanceToDestination = box.y - box.destination.y
+    --     -- if (xDistanceToDestination > squares * 1.5) then break 
+    --     -- end
+    --     -- print ('xDistanceToDestination', xDistanceToDestination)
+    --                 --print(box.x, xDistanceToDestination, box.destination.x)
 
-        if xDistanceToDestination > 0 and xDistanceToDestination <= squares * 2 then
-            box.x = box.x + dt * boxPushSpeed
-        elseif xDistanceToDestination < 0  and xDistanceToDestination >= squares * 2  then
-            box.x = box.x - dt * boxPushSpeed
-        elseif yDistanceToDestination > 0 and yDistanceToDestination <= squares * 2 then
-            box.y =  box.y + dt * boxPushSpeed
-        elseif yDistanceToDestination < 0 and yDistanceToDestination >= squares * 2 then
-            box.y = box.y - dt * boxPushSpeed
-        else
-            -- if (math.abs(box.x - box.oldPosition.x) > squares or math.abs(box.y - box.oldPosition.y) > squares) then 
-            --     break
-            -- end
-            local collisionSides = checkWizardCollision(box)
-            -- box.oldPosition.x = box.x
-            -- print(collisionSides.x, box.oldPosition.x, box.destination.x, box.x - box.oldPosition.x)
-            -- if (collisionSides.x ~= 0 and math.abs(box.x - box.oldPosition.x) < squares) then 
-            --     box.oldPosition.x = box.x
-            if (collisionSides.x ~= 0) then
-                box.destination.x = roundToGrid(box.x) + collisionSides.x * squares
-            elseif (collisionSides.y ~=0) then 
-                box.destination.y = roundToGrid(box.y) + collisionSides.y * squares
-            end
-            print('x', collisionSides.x, 'y', collisionSides.y)
-            --end
-            -- local newDestinationY = box.destination.y + collisionSides.y * squares 
-            -- local distToNewDestY = math.abs(newDestinationY - box.oldPosition.y)
-            -- print('distToNewDestX', distToNewDestX)
-            -- if distToNewDestX =< 0 then 
+    --     if xDistanceToDestination > 0 and xDistanceToDestination <= squares * 2 then
+    --         box.x = box.x + dt * boxPushSpeed
+    --     elseif xDistanceToDestination < 0  and xDistanceToDestination >= squares * 2  then
+    --         box.x = box.x - dt * boxPushSpeed
+    --     elseif yDistanceToDestination > 0 and yDistanceToDestination <= squares * 2 then
+    --         box.y =  box.y + dt * boxPushSpeed
+    --     elseif yDistanceToDestination < 0 and yDistanceToDestination >= squares * 2 then
+    --         box.y = box.y - dt * boxPushSpeed
+    --     else
+    --         -- if (math.abs(box.x - box.oldPosition.x) > squares or math.abs(box.y - box.oldPosition.y) > squares) then 
+    --         --     break
+    --         -- end
+    --         -- box.oldPosition.x = box.x
+    --         -- print(collisionSides.x, box.oldPosition.x, box.destination.x, box.x - box.oldPosition.x)
+    --         -- if (collisionSides.x ~= 0 and math.abs(box.x - box.oldPosition.x) < squares) then 
+    --         --     box.oldPosition.x = box.x
+    --         if (collisionSides.x ~= 0) then
+    --             box.destination.x = roundToGrid(box.x) + collisionSides.x * squares
+    --         elseif (collisionSides.y ~=0) then 
+    --             box.destination.y = roundToGrid(box.y) + collisionSides.y * squares
+    --         end
+    --         print('x', collisionSides.x, 'y', collisionSides.y)
+    --         --end
+    --         -- local newDestinationY = box.destination.y + collisionSides.y * squares 
+    --         -- local distToNewDestY = math.abs(newDestinationY - box.oldPosition.y)
+    --         -- print('distToNewDestX', distToNewDestX)
+    --         -- if distToNewDestX =< 0 then 
                 
-            -- else if distToNewDestX <= squares then 
-            --     box.destination.x = newDestinationX
+    --         -- else if distToNewDestX <= squares then 
+    --         --     box.destination.x = newDestinationX
     
-            -- else if distToNewDestY > 0 and distToNewDestY <= squares then box.destination.y = newDestinationY        
-        end
-    end 
+    --         -- else if distToNewDestY > 0 and distToNewDestY <= squares then box.destination.y = newDestinationY        
+    --     end
+    -- end 
 end
 
 
@@ -256,20 +260,25 @@ function love.draw()
         gameMap.layers['walls - tiles']
     )
     -- don't render the "boxes - tiles - hidden" layer, it is just for visual reference in Tiled
+    
+    -- TODO replace this with quads - see https://sheepolution.com/learn/book/17
     wizard.currentAnimation:draw(
         wizard.spriteSheet,
-        wizard.x, wizard.y,
+        wizard.body:getX() + wizard.width / 2,
+        wizard.body:getY() + wizard.height / 2,
         nil, 
-        wizard.scale,
-        wizard.scale,
-        wizard.width / 2,
-        wizard.height / 2
+        1, 
+        1,
+        wizard.width,
+        wizard.height
     )
 
+    -- draaw body for debugging 
+    love.graphics.polygon("line", wizard.body:getWorldPoints(wizard.shape:getPoints()))
+    
     for i, obj in pairs (boxes) do 
         love.graphics.draw(obj.sprite, obj.x, obj.y)
     end 
-    world:draw() -- uncomment to view collider outlines
 
     cam1:detach()
 end

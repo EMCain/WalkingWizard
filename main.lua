@@ -31,44 +31,6 @@ local function roundToGrid(x)
      return 0
     end
 end
-    
-local function checkWizardCollision(collisionObject)
-    local wizardLeft = wizard.collider:getX()
-    local wizardRight = wizard.collider:getX() + wizard.colliderWidth
-    local wizardTop = wizard.collider:getY() - wizard.colliderHeight -- may be complicated by isometric view/wizard's hat being above "grounded" area
-    local wizardBottom = wizard.collider:getY()
-
-    local itemWidth = collisionObject.sprite:getWidth()
-    local itemHeight = collisionObject.sprite:getHeight()
-
-    local collisionObjectLeft = collisionObject.x
-    local collisionObjectRight = collisionObject.x + itemWidth
-    local collisionObjectTop = collisionObject.y
-    local collisionObjectBottom = collisionObject.y + itemHeight
-    local isCollision =  wizardRight > collisionObjectLeft
-        and wizardLeft < collisionObjectRight
-        and wizardBottom > collisionObjectTop
-        and wizardTop < collisionObjectBottom;
-    if not isCollision then
-        return { x=0, y=0 }
-    end
-    
-    local result = { x=0, y=0 }
-    local xDifference = math.floor(wizardLeft - collisionObjectLeft)
-    local yDifference = math.floor(wizardTop - collisionObjectTop)
-    if (math.abs(xDifference) > math.abs(yDifference)) then 
-        result.x = xDifference / math.abs(xDifference)
-    elseif (math.abs(xDifference) < math.abs(yDifference)) then
-        result.y = yDifference / math.abs(yDifference)
-    end
-    -- don't do anything if they're equal, I don't want to allow diagonal pushing
-    return result
-end
-
-local function setPushableMidpointAndDestination (self, directionVector)
-    self.destination.x = self.x + directionVector.x * squares
-    self.destination.y = self.y + directionVector.y * squares
-end
 
 function love.load()
     local sti = require('lib/sti')
@@ -128,7 +90,12 @@ function love.load()
         for i, obj in pairs(gameMap.layers['walls - objects'].objects) do
             if obj.width > 0 and obj.height > 0 then
                 local wall = {}
-                wall.body = love.physics.newBody(world, obj.x + obj.width / 2, obj.y + obj.height / 2, "static")
+                wall.body = love.physics.newBody(
+                    world, 
+                    obj.x + obj.width / 2,
+                    obj.y + obj.height / 2,
+                    "static")
+
                 wall.shape = love.physics.newRectangleShape(obj.width, obj.height)
                 wall.fixture = love.physics.newFixture(wall.body, wall.shape)
 
